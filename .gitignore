@@ -1,0 +1,9 @@
+sender
+receiver
+*.o
+.DS_Store
+test/client/
+test/server/
+test/*.txt
+test/*.bin
+test/*.log
