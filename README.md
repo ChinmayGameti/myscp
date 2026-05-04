@@ -1,66 +1,96 @@
 ```markdown
-# myscp
+# MySCP: High-Performance SSH Streaming Transfer
 
-A cross-platform (macOS/Linux) file transfer utility written in C++ using POSIX sockets and OpenSSL.
+A robust, cross-platform C++ utility that streams files over secure SSH tunnels using a custom binary protocol. Built with **libssh** and **OpenSSL**, it features single-pass streaming to eliminate double I/O, on-the-fly SHA256 integrity verification, and automated environment bootstrapping.
 
-## Features
-*   **Chunked Transfer:** Supports files up to 16GB+ without RAM exhaustion.
-*   **Data Integrity:** SHA256 Checksum verification for every transfer.
-*   **Cross-Platform:** Automatically handles Endianness differences between Apple Silicon (ARM) and Intel/AMD architectures.
-*   **Fault Injection:** Built-in ability to intentionally corrupt checksums for testing error handling.
+## ✨ Key Features
+- **Single-Pass Streaming:** Hashes and transmits data simultaneously (Header -> Data -> Trailer) to eliminate disk bottlenecking.
+- **Automated Infrastructure:** Built-in OS detection automatically configures remote SSH daemons (handles Linux package managers and macOS TCC security gracefully).
+- **Zero-Privilege Install:** Installs entirely in user-space (`~/.local/bin`). No `sudo` required for installation.
+- **Smart Path Resolution:** Automatically hunts for the receiver binary across standard system paths on the remote host.
 
-## Build Instructions
-Ensure you have OpenSSL installed (`brew install openssl` on macOS or `sudo apt install libssl-dev` on Linux).
+---
+
+## 🚀 Quickstart
+
+### 1. Install Dependencies
+* **macOS:** `brew install libssh openssl@3`
+* **Linux (Debian/Ubuntu):** `sudo apt install libssh-dev libssl-dev`
+
+### 2. Build & Install
+Run this on **both** your local machine and the remote machine:
 ```bash
-# Build the sender and receiver binaries
 make
+make install
 ```
+*(Note: The installer automatically grants execution permissions (`chmod +x`) to the binaries and will tell you if you need to add them to your `$PATH`).*
 
-## Automated Testing
-This repository includes a dedicated test environment with an automated script that creates a 5MB payload, transfers it over the local loopback, and verifies the checksums.
+### 3. Bootstrap the Remote Environment
+Run this on the **remote** machine to ensure the SSH daemon is ready to receive files:
 ```bash
-cd test
-make test
+make setup
 ```
 
-## Manual Usage
-To use the utility manually, start the receiver first, then run the sender.
-
-### 1. Start Receiver
-The receiver listens on port 9000 by default.
+### 4. Transfer a File
+From your **local** machine, stream a file to the remote host:
 ```bash
-./receiver
+myscp-send 192.168.1.50 my_large_file.zip
 ```
 
-### 2. Sender Commands
-The sender binary requires the destination IP and the file path. It also supports an optional flag for fault injection testing.
+---
 
-**Syntax:**
+## 🛠 Command Reference
+
+### Build & Setup Commands
+| Command | Description |
+| :--- | :--- |
+| `make` | Compiles the `sender` and `receiver` binaries locally. |
+| `make install` | Copies binaries to `~/.local/bin/` and applies `chmod +x` automatically. |
+| `make setup` | Auto-detects your OS and configures the SSH daemon (`sshd`). |
+
+### Testing Commands
+If you are running the test scripts manually outside of the Makefile, ensure you grant them execution privileges first (e.g., `chmod +x test/run_test.sh`).
+
+| Command | Description |
+| :--- | :--- |
+| `make run-test` | Runs the automated integration suite. Generates a payload, streams it over SSH `localhost`, and verifies it in a sandbox folder. |
+| `make unit-test` | Compiles and executes the C++ assertion tests for header packing and endianness formatting. |
+
+### Transfer Commands
+| Command | Description |
+| :--- | :--- |
+| `myscp-send <ip> <file>` | Streams a file to the remote user's home directory. |
+| `myscp-send <ip> <file> <remote/path/>` | Streams a file to a specific remote destination. |
+| `myscp-send <ip> --setup` | Performs a pre-flight diagnostic to verify SSH keys and remote binary availability without sending data. |
+| `myscp-send <ip> <file> --corrupt-checksum` | Intentionally flips a bit in the SHA256 trailer to test the receiver's rejection logic. |
+
+### Cleanup Commands
+| Command | Description |
+| :--- | :--- |
+| `make clean` | Wipes the local repository of compiled binaries, `.o` files, macOS `.dSYM` folders, and all test sandbox payloads. |
+| `make uninstall` | Removes the installed `myscp-send` and `myscp-recv` binaries from your system's `~/.local/bin/` folder. Always run this when completely removing the project. |
+
+---
+
+## 🔍 Debugging & Architecture
+
+If you are running into "Connection Refused" or "Access Denied" errors, or if you want to understand the system architecture, check your SSH configuration.
+
+**Resolving Authentication Failures:**
+`myscp` relies on Public Key Authentication to execute the remote receiver silently. If prompted for a password, push your key to the server:
 ```bash
-./sender <destination_ip> <path_to_file> [--corrupt-checksum]
+ssh-copy-id user@192.168.1.50
 ```
 
-**Arguments:**
-*   `<destination_ip>`: The IP address of the machine running the receiver (e.g., 127.0.0.1 for local testing).
-*   `<path_to_file>`: The local path to the file you want to transfer.
-*   `--corrupt-checksum`: (Optional) Intentionally flips bits in the SHA256 hash before transmission to trigger a verification failure on the receiver side.
-
-**Examples:**
+**Manual Daemon Debugging (macOS/Linux):**
+If you need to bypass system services and run the SSH daemon manually in the foreground so it accepts multiple connections indefinitely, use:
 ```bash
-# Standard transfer to a local receiver
-./sender 127.0.0.1 payload.bin
-
-# Standard transfer to a remote Linux server
-./sender 192.168.1.15 important_data.tar.gz
-
-# Transfer with intentional checksum failure (Fault Injection)
-./sender 127.0.0.1 payload.bin --corrupt-checksum
+sudo /usr/sbin/sshd -D -p 22
 ```
 
-## Protocol Details
-`myscp` uses a packed 300-byte binary header sent over raw TCP (`SOCK_STREAM`):
-*   **Magic Number (4 Bytes):** Protocol identification (`0x53435058`).
-*   **File Size (8 Bytes):** 64-bit integer (Network Byte Order).
-*   **Filename (256 Bytes):** Null-terminated string.
-*   **SHA256 Hash (32 Bytes):** Binary representation of the file hash.
+*Deep Debugging:* If you want to watch the real-time cryptographic handshakes to debug a specific connection issue, add the `-d` flag. **Note: In `-d` (debug) mode, the server will intentionally exit after handling exactly one connection.**
+```bash
+sudo /usr/sbin/sshd -D -d -p 22
+```
+
 ```

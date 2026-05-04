@@ -1,9 +1,20 @@
+# Compiled Object files
+*.o
+*.out
+
+# Compiled local project binaries
 sender
 receiver
-*.o
+test/runner
+
+# macOS specific artifacts
 .DS_Store
-test/client/
-test/server/
-test/*.txt
-test/*.bin
-test/*.log
+*.dSYM/
+test/*.dSYM/
+
+# Test artifacts and payloads
+payload.bin
+test_payload.bin
+test/sandbox/
+*.log
+*.txt
