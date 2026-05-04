@@ -7,17 +7,17 @@ MySCP is a high-performance, cross-platform file transfer utility built in C++ t
 ```mermaid
 C4Context
     title System Context: MySCP Utility
+    
     Person(user, "User", "Initiates file transfer")
     System(myscp, "MySCP", "Securely transfers large files up to 16GB")
+    
     System_Ext(ssh_daemon, "OpenSSH Daemon", "Provides secure TCP transport layer")
     System_Ext(os_fs, "File System", "Source and Destination storage")
 
-    Rel(user, myscp, "Executes myscp-send")
-    Rel(myscp, ssh_daemon, "Establishes secure TCP tunnel")
-    Rel(ssh_daemon, myscp, "Spawns myscp-recv")
-    Rel(myscp, os_fs, "Reads/Writes 64KB Chunks")
+    Rel_D(user, myscp, "Executes myscp-send")
+    BiRel_R(myscp, ssh_daemon, "Establishes tunnel & spawns receiver")
+    Rel_D(myscp, os_fs, "Reads/Writes 64KB Chunks")
 ```
-
 ## 2. Design Considerations
 
 ### Should I break the file into smaller chunks?
