@@ -72,7 +72,7 @@ setup-mac:
 	@echo "For local testing, run the SSH daemon in the foreground."
 	@echo "------------------------------------------------------------------"
 	@echo "👉 OPEN A NEW TERMINAL TAB AND RUN THIS EXACT COMMAND:"
-	@echo "   sudo /usr/sbin/sshd -D -d -p 22"
+	@echo "   sudo /usr/sbin/sshd -D -p 22"
 	@echo "------------------------------------------------------------------"
 	@echo "Keep that tab open. Then come back here to run myscp-send."
 
