@@ -104,6 +104,31 @@ unit-test:
 run-test: install
 	@echo "Running integration test suite..."
 	@bash test/run_test.sh
+
+# ==========================================
+# Performance Benchmarks
+# ==========================================
+
+# End-to-end transfer benchmark: throughput + peak RSS at multiple sizes.
+# Override defaults via env vars, e.g. SIZES="100M 1G 5G" make bench
+bench: install
+	@echo "Running myscp transfer benchmark..."
+	@bash bench/run_bench.sh
+
+# Chunk-size sweep: defends the CHUNK_SIZE choice in common.h
+bench-chunk: bench/measure_chunk
+	@echo "Generating 1 GiB sample for chunk-size sweep..."
+	@mkdir -p bench/sandbox
+	@if [ "$(UNAME_S)" = "Darwin" ]; then \
+		dd if=/dev/urandom of=bench/sandbox/chunk_sample.bin bs=1m count=1024 2>/dev/null; \
+	else \
+		dd if=/dev/urandom of=bench/sandbox/chunk_sample.bin bs=1M count=1024 2>/dev/null; \
+	fi
+	@./bench/measure_chunk bench/sandbox/chunk_sample.bin
+
+bench/measure_chunk: bench/measure_chunk.cpp common.h
+	$(CXX) $(CXXFLAGS) $(INC) bench/measure_chunk.cpp -o bench/measure_chunk $(LIB)
+
 # ==========================================
 # Maintenance
 # ==========================================
@@ -122,9 +147,13 @@ clean:
 	@echo "[CLEAN] Destroying test sandbox and local payloads..."
 	@rm -rf test/sandbox
 	@rm -f test/*.bin test/*.txt test/*.log test_payload.bin payload.bin
+	@echo "[CLEAN] Destroying benchmark sandbox and artifacts..."
+	@rm -rf bench/sandbox
+	@rm -f bench/measure_chunk bench/results.md
+	@rm -rf bench/*.dSYM
 	@echo "[CLEAN] Removing accidental home-directory payloads..."
 	@rm -f ~/payload.bin ~/test_payload.bin
 	@echo "✨ Repository restored to pristine state."
 	@echo "💡 Note: This only cleans the local repository. To remove installed binaries from your system, run 'make uninstall'"
 
-.PHONY: all install uninstall setup setup-mac setup-linux clean run-test unit-test
+.PHONY: all install uninstall setup setup-mac setup-linux clean run-test unit-test bench bench-chunk

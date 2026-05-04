@@ -56,6 +56,15 @@ If you are running the test scripts manually outside of the Makefile, ensure you
 | `make run-test` | Runs the automated integration suite. Generates a payload, streams it over SSH `localhost`, and verifies it in a sandbox folder. |
 | `make unit-test` | Compiles and executes the C++ assertion tests for header packing and endianness formatting. |
 
+### Performance Benchmarks
+
+| Command | Description |
+| :--- | :--- |
+| `make bench` | Streams 100 MB and 1 GB random payloads to `127.0.0.1`, captures wall time + peak RSS via `/usr/bin/time`, writes a markdown table to `bench/results.md`. Override sizes with `SIZES="100M 1G 5G" make bench` or target a remote host with `HOST=192.168.1.50 make bench`. |
+| `make bench-chunk` | Compiles `bench/measure_chunk` and sweeps SHA-256-on-fly throughput across chunk sizes (4 KB → 4 MB) to defend the production `CHUNK_SIZE` value. |
+
+Paste the resulting numbers into the **Performance Metrics** section of `PROJECT_DESIGN.md`.
+
 ### Transfer Commands
 | Command | Description |
 | :--- | :--- |
