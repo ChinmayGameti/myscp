@@ -2,35 +2,57 @@
 UNAME_S := $(shell uname -s)
 
 # 2. Compiler and Flags
-CXX ?= g++
+CXX ?= c++
 CXXFLAGS = -Wall -Wextra -O2 -std=c++11 -Wno-deprecated-declarations
 
-# 3. OS-Specific OpenSSL Paths
+# 3. OS-Specific Paths for OpenSSL & libssh
 ifeq ($(UNAME_S), Darwin)
-    # macOS Logic: Use Homebrew paths
-    OPENSSL_PREFIX = $(shell brew --prefix openssl)
-    INC = -I$(OPENSSL_PREFIX)/include
-    LIB = -L$(OPENSSL_PREFIX)/lib -lssl -lcrypto
+    OPENSSL_PREFIX = $(shell brew --prefix openssl@3)
+    LIBSSH_PREFIX = $(shell brew --prefix libssh)
+    INC = -I$(OPENSSL_PREFIX)/include -I$(LIBSSH_PREFIX)/include
+    LIB = -L$(OPENSSL_PREFIX)/lib -lssl -lcrypto -L$(LIBSSH_PREFIX)/lib -lssh
 else
-    # Linux Logic: Use standard system paths
     INC = 
-    LIB = -lssl -lcrypto
+    LIB = -lssl -lcrypto -lssh
 endif
 
-# 4. Executable names
+# 4. Target Variables
 SENDER = sender
 RECEIVER = receiver
+PREFIX = $(HOME)/.local/bin
 
-# Default target
 all: $(SENDER) $(RECEIVER)
 
-$(SENDER): sender.cpp protocol.h
+$(SENDER): sender.cpp common.h
 	$(CXX) $(CXXFLAGS) $(INC) sender.cpp -o $(SENDER) $(LIB)
 
-$(RECEIVER): receiver.cpp protocol.h
+$(RECEIVER): receiver.cpp common.h
 	$(CXX) $(CXXFLAGS) $(INC) receiver.cpp -o $(RECEIVER) $(LIB)
 
-clean:
-	rm -f $(SENDER) $(RECEIVER)
+install: all
+	@echo "Installing to $(PREFIX)..."
+	mkdir -p $(PREFIX)
+	cp $(SENDER) $(PREFIX)/myscp-send
+	cp $(RECEIVER) $(PREFIX)/myscp-recv
+	chmod +x $(PREFIX)/myscp-send
+	chmod +x $(PREFIX)/myscp-recv
+	@echo "Installation complete. Ensure $(PREFIX) is in your PATH."
 
-.PHONY: all clean
+uninstall:
+	@echo "[UNINSTALL] Removing binaries from $(PREFIX)..."
+	rm -f $(PREFIX)/myscp-send
+	rm -f $(PREFIX)/myscp-recv
+	@echo "myscp removed from system."
+
+clean:
+	@echo "[CLEAN] Removing compiled binaries..."
+	rm -f $(SENDER) $(RECEIVER)
+	@echo "[CLEAN] Removing object files and macOS debug symbols..."
+	rm -rf *.o *.dSYM test/*.dSYM
+	@echo "[CLEAN] Removing local test artifacts..."
+	rm -f test/*.bin test/*.txt test/*.log test_payload.bin
+	@echo "[CLEAN] Removing remote test artifacts (SSH loopback file)..."
+	rm -f ~/test_payload.bin
+	@echo "✨ Repository restored to pristine state."
+
+.PHONY: all clean install uninstall

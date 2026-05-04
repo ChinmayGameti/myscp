@@ -1,12 +1,5 @@
-#include <iostream>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <string.h>
-#include <libgen.h>
-#include <sys/stat.h>
-#include <openssl/sha.h>
-#include "protocol.h"
+#include "common.h"
+#include <libssh/libssh.h>
 
 void calculate_sha256(const char* path, uint8_t* output) {
     FILE* fp = fopen(path, "rb");
@@ -24,73 +17,102 @@ void calculate_sha256(const char* path, uint8_t* output) {
 
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <ip> <file> [--corrupt-checksum]" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <ip> <local_file> [remote_path] [--corrupt-checksum]" << std::endl;
         return 1;
     }
 
-    // Parse flags
-    bool inject_checksum_fault = false;
-    for (int i = 1; i < argc; i++) {
+    bool inject_fault = false;
+    std::string remote_path = "";
+
+    // Parse arguments
+    for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "--corrupt-checksum") == 0) {
-            inject_checksum_fault = true;
+            inject_fault = true;
+        } else {
+            remote_path = argv[i];
         }
     }
 
     struct stat st;
     if (stat(argv[2], &st) != 0) {
-        perror("[ERROR] File stat failed");
+        perror("[ERROR] Local file stat failed");
         return 1;
     }
 
-    // 1. Calculate Real Checksum
     uint8_t hash[32];
     calculate_sha256(argv[2], hash);
-
-    if (inject_checksum_fault) {
-        std::cout << "[DEBUG] Intentional corruption of SHA256 checksum..." << std::endl;
-        hash[0] ^= 0xFF; // Flip bits in the first byte
+    if (inject_fault) {
+        std::cout << "[DEBUG] Injecting intentional checksum fault..." << std::endl;
+        hash[0] ^= 0xFF; 
     }
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serv_addr = {}; // Zeroed out
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    ssh_session my_ssh_session = ssh_new();
+    if (my_ssh_session == NULL) exit(-1);
+    ssh_options_set(my_ssh_session, SSH_OPTIONS_HOST, argv[1]);
     
-    if (inet_pton(AF_INET, argv[1], &serv_addr.sin_addr) <= 0) {
-        std::cerr << "[ERROR] Invalid address" << std::endl;
+    std::cout << "[INFO] Connecting to " << argv[1] << "..." << std::endl;
+    if (ssh_connect(my_ssh_session) != SSH_OK) {
+        std::cerr << "[ERROR] Connection failed: " << ssh_get_error(my_ssh_session) << std::endl;
         return 1;
     }
 
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("[ERROR] Connection failed");
+    if (ssh_userauth_publickey_auto(my_ssh_session, NULL, NULL) != SSH_AUTH_SUCCESS) {
+        std::cerr << "[ERROR] Authentication failed: " << ssh_get_error(my_ssh_session) << std::endl;
         return 1;
     }
 
-    // 2. Send Header
-    FileHeader header = {}; // Zeroed out
+    ssh_channel channel = ssh_channel_new(my_ssh_session);
+    if (channel == NULL || ssh_channel_open_session(channel) != SSH_OK) return 1;
+
+    std::string exec_cmd = "~/.local/bin/myscp-recv --server";
+    if (!remote_path.empty()) exec_cmd += " " + remote_path;
+
+    if (ssh_channel_request_exec(channel, exec_cmd.c_str()) != SSH_OK) {
+        std::cerr << "[ERROR] Cannot execute remote receiver." << std::endl;
+        return 1;
+    }
+
+    FileHeader header = {}; 
     header.magic = htonl(MAGIC_NUMBER);
     header.file_size = htobe64(st.st_size);
     strncpy(header.filename, basename((char*)argv[2]), 256);
     memcpy(header.checksum, hash, 32);
 
-    if (send(sock, &header, sizeof(FileHeader), 0) < 0) {
-        perror("[ERROR] Header send failed");
-        return 1;
-    }
+    ssh_channel_write(channel, &header, sizeof(FileHeader));
 
-    // 3. Stream File
     FILE* fp = fopen(argv[2], "rb");
     char buffer[CHUNK_SIZE];
     size_t bytes_read;
+    bool transmission_success = true;
+
     while ((bytes_read = fread(buffer, 1, CHUNK_SIZE, fp)) > 0) {
-        if (send(sock, buffer, bytes_read, 0) < 0) {
-            perror("[ERROR] Data stream failed");
+        // If receiver crashes or exits (e.g., path not found), write will fail
+        int written = ssh_channel_write(channel, buffer, bytes_read);
+        if (written < 0) {
+            std::cerr << "❌ [ERROR] Connection lost or receiver terminated early." << std::endl;
+            transmission_success = false;
             break;
         }
     }
-
-    std::cout << "[SUCCESS] File sent." << std::endl;
     fclose(fp);
-    close(sock);
-    return 0;
+    
+    if (transmission_success) {
+        ssh_channel_send_eof(channel);
+    }
+
+    // Read any output (success or errors) thrown by the remote receiver
+    std::cout << "\n--- Remote Server Logs ---" << std::endl;
+    char remote_output[256];
+    int nbytes;
+    while ((nbytes = ssh_channel_read(channel, remote_output, sizeof(remote_output), 0)) > 0) {
+        std::cout.write(remote_output, nbytes);
+    }
+    std::cout << "--------------------------" << std::endl;
+
+    ssh_channel_close(channel);
+    ssh_channel_free(channel);
+    ssh_disconnect(my_ssh_session);
+    ssh_free(my_ssh_session);
+    
+    return transmission_success ? 0 : 1;
 }

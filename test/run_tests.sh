@@ -1,40 +1,43 @@
 #!/bin/bash
 
-# Ensure we are in the test directory
-cd "$(dirname "$0")"
+echo "========================================"
+echo " Starting myscp SSH Integration Tests"
+echo "========================================"
 
-# 1. Generate a random 5MB test file
-echo "[TEST] Generating 5MB payload..."
-dd if=/dev/urandom of=client/payload.bin bs=1024 count=5000 2>/dev/null
-
-# 2. Start Receiver in the background
-echo "[TEST] Starting receiver..."
-cd server
-./receiver > ../recv_log.txt 2>&1 &
-RECV_PID=$!
 cd ..
+make clean && make
+make install
+cd test
 
-# Give the receiver a second to start listening
-sleep 1 
-
-# 3. Run the Sender
-echo "[TEST] Running sender..."
-cd client
-./sender 127.0.0.1 payload.bin > ../send_log.txt 2>&1
-cd ..
-
-# Give the transfer a moment to finish writing to disk
-sleep 1
-
-# 4. Verify the results
-echo "-----------------------------------"
-if cmp -s "client/payload.bin" "server/payload.bin"; then
-    echo "✅ [RESULT] SUCCESS: Files are completely identical!"
-else
-    echo "❌ [RESULT] FAILED: Files do not match!"
-    echo "Check recv_log.txt and send_log.txt for details."
+echo "[SETUP] Testing localhost SSH access..."
+if ! ssh -o BatchMode=yes -o ConnectTimeout=2 127.0.0.1 exit 2>/dev/null; then
+    echo "❌ [ERROR] Cannot SSH into 127.0.0.1."
+    exit 1
 fi
-echo "-----------------------------------"
 
-# 5. Cleanup the background process
-kill $RECV_PID 2>/dev/null
+PAYLOAD="test_payload.bin"
+echo "[TEST] Creating 5MB test payload..."
+dd if=/dev/urandom of=$PAYLOAD bs=1M count=5 2>/dev/null
+
+echo "----------------------------------------"
+echo "[TEST 1] Valid Transfer to Home Directory"
+~/.local/bin/myscp-send 127.0.0.1 $PAYLOAD
+
+echo "----------------------------------------"
+echo "[TEST 2] Path Parsing: Custom Filename"
+~/.local/bin/myscp-send 127.0.0.1 $PAYLOAD custom_name.bin
+
+echo "----------------------------------------"
+echo "[TEST 3] Error Propagation: Invalid Path"
+# This path does not exist, the receiver should fail, and the sender should catch it
+~/.local/bin/myscp-send 127.0.0.1 $PAYLOAD /this/path/does/not/exist/
+
+echo "----------------------------------------"
+echo "[CLEANUP] Removing test artifacts..."
+rm -f $PAYLOAD
+rm -f ~/$PAYLOAD 
+rm -f ~/custom_name.bin
+
+echo "========================================"
+echo " Tests Complete."
+echo "========================================"

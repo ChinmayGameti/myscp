@@ -1,13 +1,26 @@
-#ifndef PROTOCOL_H
-#define PROTOCOL_H
+#ifndef COMMON_H
+#define COMMON_H
 
+// 1. Standard C++ Headers
+#include <iostream>
+#include <string>
+
+// 2. Standard C/POSIX Headers
 #include <stdint.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <libgen.h>
 
+// 3. OpenSSL
+#define OPENSSL_SUPPRESS_DEPRECATED
+#include <openssl/sha.h>
+
+// 4. Cross-Platform Endianness
 #ifdef __APPLE__
     #include <libkern/OSByteOrder.h>
     #define htobe64(x) OSSwapHostToBigInt64(x)
     #define be64toh(x) OSSwapBigToHostInt64(x)
-    // Only define if the system hasn't already
     #ifndef htonl
         #define htonl(x) OSSwapHostToBigInt32(x)
     #endif
@@ -17,10 +30,9 @@
 #else
     #include <endian.h>
     #include <arpa/inet.h>
-    #include <byteswap.h>
 #endif
 
-#define PORT 9000
+// 5. Protocol Definitions
 #define CHUNK_SIZE 65536
 #define MAGIC_NUMBER 0x53435058 
 
