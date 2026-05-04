@@ -17,8 +17,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    header.filename[sizeof(header.filename) - 1] = '\0';
+
     uint64_t file_size = be64toh(header.file_size);
-    std::string save_path = header.filename; 
+    std::string save_path = header.filename;
 
     if (argc >= 3) {
         std::string target_path = argv[2];
@@ -63,9 +65,9 @@ int main(int argc, char *argv[]) {
 
     if (memcmp(local_hash, trailer.checksum, 32) == 0) {
         std::cout << "✅ [REMOTE VERIFIED] " << header.filename << " matches SHA256 checksum perfectly." << std::endl;
+        return 0;
     } else {
         std::cout << "❌ [REMOTE ALERT] Checksum mismatch! File corrupted." << std::endl;
+        return 1;
     }
-    
-    return 0;
 }

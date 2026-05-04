@@ -105,7 +105,8 @@ int main(int argc, char const *argv[]) {
     std::string base_name = local_file;
     size_t pos = base_name.find_last_of("/\\");
     if (pos != std::string::npos) base_name = base_name.substr(pos + 1);
-    strncpy(header.filename, base_name.c_str(), 256);
+    strncpy(header.filename, base_name.c_str(), sizeof(header.filename) - 1);
+    header.filename[sizeof(header.filename) - 1] = '\0';
 
     ssh_channel_write(channel, &header, sizeof(FileHeader));
 
