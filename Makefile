@@ -96,21 +96,27 @@ setup-linux:
 	fi
 
 unit-test:
-	@echo "Unit testing framework not yet configured."
-	@echo "Future home for testing sender/receiver core logic."
+	@echo "Building unit tests..."
+	$(CXX) $(CXXFLAGS) $(INC) test/unit_test.cpp -o test/runner $(LIB)
+	@./test/runner
 
 # Full end-to-end integration test suite
 run-test: install
 	@echo "Running integration test suite..."
 	@bash test/run_test.sh
-
 # ==========================================
 # Maintenance
 # ==========================================
 
+uninstall:
+	@echo "[UNINSTALL] Removing binaries from $(PREFIX)..."
+	@rm -f $(PREFIX)/myscp-send
+	@rm -f $(PREFIX)/myscp-recv
+	@echo "✅ myscp removed from system."
+
 clean:
 	@echo "[CLEAN] Removing compiled binaries..."
-	@rm -f $(SENDER) $(RECEIVER)
+	@rm -f $(SENDER) $(RECEIVER) test/runner
 	@echo "[CLEAN] Removing object files and macOS debug symbols..."
 	@rm -rf *.o *.dSYM test/*.dSYM
 	@echo "[CLEAN] Destroying test sandbox and local payloads..."
@@ -119,5 +125,6 @@ clean:
 	@echo "[CLEAN] Removing accidental home-directory payloads..."
 	@rm -f ~/payload.bin ~/test_payload.bin
 	@echo "✨ Repository restored to pristine state."
+	@echo "💡 Note: This only cleans the local repository. To remove installed binaries from your system, run 'make uninstall'"
 
 .PHONY: all install uninstall setup setup-mac setup-linux clean run-test unit-test
