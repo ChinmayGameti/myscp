@@ -14,9 +14,9 @@ C4Context
     System_Ext(ssh_daemon, "OpenSSH Daemon", "Provides secure TCP transport layer")
     System_Ext(os_fs, "File System", "Source and Destination storage")
 
-    Rel_D(user, myscp, "Executes myscp-send")
-    BiRel_R(myscp, ssh_daemon, "Establishes tunnel & spawns receiver")
-    Rel_D(myscp, os_fs, "Reads/Writes 64KB Chunks")
+    Rel(user, myscp, "Executes myscp-send")
+    Rel(myscp, ssh_daemon, "Establishes tunnel & spawns receiver")
+    Rel(myscp, os_fs, "Reads/Writes 64KB Chunks")
 ```
 ## 2. Design Considerations
 
